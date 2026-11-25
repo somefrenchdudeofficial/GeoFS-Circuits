@@ -1,10 +1,11 @@
 {
   "track_one": {
-    "name": "Circuit Paul Ricard",
+    "name": "Circuit Paul Ricard - Modern Layout",
     "trackWidth": 15,
     "pitWidth": 4,
     "kerbWidth": 1.1,
     "kerbBlockMeters": 2.5,
+    "spawnPoint": {"lon": 5.793063, "lat": 43.251140, "heading": 305},
     "waypoints": [
       [5.7904511, 43.2526073],
       [5.7900899, 43.2528141],
@@ -362,6 +363,7 @@
     "pitWidth": 5,
     "kerbWidth": 1.1,
     "kerbBlockMeters": 2.5,
+    "spawnPoint": {},
     "waypoints": [],
     "pitWaypoints": [],
     "kerbZones": []
