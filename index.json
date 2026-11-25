@@ -14,5 +14,9 @@
     "outer_bahrain": {
     "name": "Bahrain International Circuit - Outer Layout",
     "file": "outer_bahrain.json"
+  },
+    "fuji": {
+    "name": "Fuji Speedway",
+    "file": "fuji.json"
   }
 }
