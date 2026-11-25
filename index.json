@@ -1,0 +1,22 @@
+{
+  "paul_ricard": {
+    "name": "Circuit Paul Ricard",
+    "file": "paul_ricard.json"
+  },
+  "lusail": {
+    "name": "Lusail International Circuit",
+    "file": "lusail.json"
+  },
+    "bahrain": {
+    "name": "Bahrain International Circuit - Grand Prix Layout",
+    "file": "bahrain.json"
+  },
+    "outer_bahrain": {
+    "name": "Bahrain International Circuit - Outer Layout",
+    "file": "outer_bahrain.json"
+  },
+  "istanbul_park": {
+    "name": "Istanbul Park",
+    "file": "istanbul_park.json"
+  }
+}
