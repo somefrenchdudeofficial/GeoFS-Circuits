@@ -14,9 +14,5 @@
     "outer_bahrain": {
     "name": "Bahrain International Circuit - Outer Layout",
     "file": "outer_bahrain.json"
-  },
-  "istanbul_park": {
-    "name": "Istanbul Park",
-    "file": "istanbul_park.json"
   }
 }
