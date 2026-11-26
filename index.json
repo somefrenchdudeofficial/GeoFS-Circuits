@@ -3,6 +3,10 @@
     "name": "Circuit Paul Ricard",
     "file": "paul_ricard.json"
   },
+    "red_bull_ring": {
+    "name": "Red Bull Ring",
+    "file": "red_bull_ring.json"
+  },
     "brands_hatch_indy": {
     "name": "Brands Hatch - Indy Layout",
     "file": "brands_hatch_indy.json"
