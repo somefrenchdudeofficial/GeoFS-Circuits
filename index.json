@@ -3,6 +3,10 @@
     "name": "Circuit Paul Ricard",
     "file": "paul_ricard.json"
   },
+    "macau": {
+    "name": "Macau Guia Circuit",
+    "file": "macau.json"
+  },
     "red_bull_ring": {
     "name": "Red Bull Ring",
     "file": "red_bull_ring.json"
