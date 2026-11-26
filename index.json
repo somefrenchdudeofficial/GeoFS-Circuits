@@ -7,6 +7,10 @@
     "name": "Macau Guia Circuit",
     "file": "macau.json"
   },
+    "zandvoort": {
+    "name": "Circuit Zandvoort",
+    "file": "zandvoort.json"
+  },
     "red_bull_ring": {
     "name": "Red Bull Ring",
     "file": "red_bull_ring.json"
