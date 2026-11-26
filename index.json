@@ -7,6 +7,10 @@
     "name": "Autódromo Hermanos Rodríguez",
     "file": "mexico.json"
   },
+    "interlagos": {
+    "name": "Interlagos Circuit",
+    "file": "interlagos.json"
+  },
     "yas_marina": {
     "name": "Yas Marina Circuit",
     "file": "yas_marina.json"
