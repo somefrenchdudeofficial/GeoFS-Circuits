@@ -1,7 +1,7 @@
 {
     "name": "Brands Hatch - Indy Layout",
-    "trackWidth": 13,
-    "pitWidth": 5,
+    "trackWidth": 10,
+    "pitWidth": 4,
     "kerbWidth": 1.1,
     "kerbBlockMeters": 2.5,
     "waypoints": [
