@@ -1,7 +1,7 @@
 {
   "name": "Laguna Seca Raceway",
-  "trackWidth": 14,
-  "pitWidth": 5,
+  "trackWidth": 11,
+  "pitWidth": 4,
   "kerbWidth": 1.1,
   "kerbBlockMeters": 2.5,
   "waypoints": [
