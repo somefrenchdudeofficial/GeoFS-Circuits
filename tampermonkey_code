@@ -1,0 +1,581 @@
+// ==UserScript==
+// @name         GeoFS Circuit Selector
+// @namespace    http://tampermonkey.net/
+// @version      0.7
+// @description  Overlay race tracks and kerbs onto GeoFS with a searchable circuit selector
+// @match        *://*.geo-fs.com/*
+// @match        http://*/geofs.php*
+// @match        https://*/geofs.php*
+// @run-at       document-end
+// @grant        unsafeWindow
+// @grant        GM_xmlhttpRequest
+// @connect      raw.githubusercontent.com
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const pageWin = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+    const TRACKS_BASE_URL = 'https://raw.githubusercontent.com/somefrenchdudeofficial/GeoFS-Circuits/refs/heads/main';
+    const INDEX_URL = 'https://raw.githubusercontent.com/somefrenchdudeofficial/GeoFS-Circuits/refs/heads/main/index.json';
+    const UI_POS_STORAGE_KEY = 'geofs_circuit_selector_pos_v1';
+
+    const DEFAULT_KERB_BLOCK_METERS = 2.5;
+    let activeEntities = [];
+    let circuitsIndex = {};
+    let loadedCircuitsCache = {};
+    let currentCircuitKey = 'none';
+    let renderToken = 0;
+
+    function parseCircuitJson(rawText) {
+        const text = typeof rawText === 'string' ? rawText.trim() : '';
+        if (!text) {
+            throw new Error('Empty response body when fetching circuit data');
+        }
+        if (text.startsWith('<')) {
+            throw new Error(`Received HTML instead of JSON: ${text.slice(0, 120)}`);
+        }
+        return JSON.parse(text);
+    }
+
+    function fetchJson(url) {
+        const bustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+        return new Promise((resolve, reject) => {
+            if (typeof GM_xmlhttpRequest === 'function') {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: bustUrl,
+                    onload: (resp) => {
+                        if (resp.status >= 200 && resp.status < 300) {
+                            try {
+                                resolve(parseCircuitJson(resp.responseText));
+                            } catch (err) {
+                                reject(err);
+                            }
+                        } else {
+                            reject(new Error(`HTTP ${resp.status} for ${bustUrl}`));
+                        }
+                    },
+                    onerror: () => reject(new Error(`Network error fetching ${bustUrl}`))
+                });
+            } else {
+                fetch(bustUrl, { cache: 'no-store' })
+                    .then(async (r) => {
+                        const body = await r.text();
+                        if (!r.ok) throw new Error(`HTTP ${r.status} for ${bustUrl}`);
+                        return parseCircuitJson(body);
+                    })
+                    .then(resolve)
+                    .catch(reject);
+            }
+        });
+    }
+
+    function resolveTrackUrl(entry, key) {
+        const rawFile = typeof entry === 'string' ? entry : (entry && entry.file);
+        const fileName = rawFile || `${key}.json`;
+        if (/^https?:\/\//i.test(fileName)) {
+            return fileName;
+        }
+        return `${TRACKS_BASE_URL}/${fileName.replace(/^\/+/, '')}`;
+    }
+
+    function clearActiveCircuit(viewer) {
+        while (activeEntities.length > 0) {
+            const entity = activeEntities.pop();
+            if (entity) {
+                viewer.entities.remove(entity);
+            }
+        }
+        currentCircuitKey = 'none';
+    }
+
+    function computeOffsetEdges(pts, widthMeters) {
+        const left = [];
+        const right = [];
+
+        const metersPerDegLat = 111320;
+        const avgLatRad = (pts[0][1] * Math.PI) / 180;
+        const metersPerDegLon = metersPerDegLat * Math.cos(avgLatRad);
+        const halfW = widthMeters / 2;
+
+        for (let i = 0; i < pts.length; i++) {
+            const prev = i > 0 ? pts[i - 1] : pts[i];
+            const curr = pts[i];
+            const next = i < pts.length - 1 ? pts[i + 1] : pts[i];
+
+            const dx = (next[0] - prev[0]) * metersPerDegLon;
+            const dy = (next[1] - prev[1]) * metersPerDegLat;
+            const len = Math.hypot(dx, dy);
+
+            const nx = len > 0.05 ? -dy / len : 0;
+            const ny = len > 0.05 ? dx / len : 0;
+
+            const dLon = (nx * halfW) / metersPerDegLon;
+            const dLat = (ny * halfW) / metersPerDegLat;
+
+            left.push([curr[0] + dLon, curr[1] + dLat]);
+            right.push([curr[0] - dLon, curr[1] - dLat]);
+        }
+
+        return { left, right, metersPerDegLat, metersPerDegLon };
+    }
+
+    function addKerbStrip(viewer, CesiumLib, innerEdge, outerEdge, startIdx, endIdx, mLat, mLon, kerbBlockMeters, zIndex, token) {
+        if (token !== renderToken) return;
+
+        const redMaterial = CesiumLib.Color.fromCssColorString('#dc2626').withAlpha(0.95);
+        const whiteMaterial = CesiumLib.Color.WHITE.withAlpha(0.95);
+        let toggle = 0;
+
+        for (let i = startIdx; i < endIdx; i++) {
+            if (token !== renderToken) return;
+
+            const inA = innerEdge[i];
+            const inB = innerEdge[i + 1];
+            const outA = outerEdge[i];
+            const outB = outerEdge[i + 1];
+
+            const segMeters = Math.hypot((inB[0] - inA[0]) * mLon, (inB[1] - inA[1]) * mLat);
+            const steps = Math.max(1, Math.round(segMeters / kerbBlockMeters));
+
+            for (let s = 0; s < steps; s++) {
+                if (token !== renderToken) return;
+
+                const t0 = s / steps;
+                const t1 = (s + 1) / steps;
+
+                const p1 = [inA[0] + (inB[0] - inA[0]) * t0, inA[1] + (inB[1] - inA[1]) * t0];
+                const p2 = [inA[0] + (inB[0] - inA[0]) * t1, inA[1] + (inB[1] - inA[1]) * t1];
+                const p3 = [outA[0] + (outB[0] - outA[0]) * t1, outA[1] + (outB[1] - outA[1]) * t1];
+                const p4 = [outA[0] + (outB[0] - outA[0]) * t0, outA[1] + (outB[1] - outA[1]) * t0];
+
+                const kerbEntity = viewer.entities.add({
+                    polygon: {
+                        hierarchy: new CesiumLib.PolygonHierarchy(
+                            CesiumLib.Cartesian3.fromDegreesArray([
+                                p1[0], p1[1],
+                                p2[0], p2[1],
+                                p3[0], p3[1],
+                                p4[0], p4[1]
+                            ])
+                        ),
+                        material: (toggle % 2 === 0) ? redMaterial : whiteMaterial,
+                        classificationType: CesiumLib.ClassificationType.BOTH,
+                        zIndex,
+                        outline: false
+                    }
+                });
+                activeEntities.push(kerbEntity);
+                toggle++;
+            }
+        }
+    }
+
+    function buildRibbon(viewer, CesiumLib, points, widthMeters, kerbWidthMeters, kerbBlockMeters, hexColor, alpha, zIndex, kerbZones, token) {
+        if (token !== renderToken) return;
+        if (!Array.isArray(points) || points.length < 2) return;
+
+        const inner = computeOffsetEdges(points, widthMeters);
+        const outer = computeOffsetEdges(points, widthMeters + kerbWidthMeters * 2);
+
+        const flatCoords = inner.left.flat();
+        for (let i = inner.right.length - 1; i >= 0; i--) {
+            flatCoords.push(inner.right[i][0], inner.right[i][1]);
+        }
+
+        const ribbonEntity = viewer.entities.add({
+            polygon: {
+                hierarchy: new CesiumLib.PolygonHierarchy(
+                    CesiumLib.Cartesian3.fromDegreesArray(flatCoords)
+                ),
+                material: CesiumLib.Color.fromCssColorString(hexColor).withAlpha(alpha),
+                classificationType: CesiumLib.ClassificationType.BOTH,
+                zIndex,
+                outline: false
+            }
+        });
+        activeEntities.push(ribbonEntity);
+
+        for (const [startIdx, endIdx, side] of (kerbZones || [])) {
+            if (token !== renderToken) return;
+            const s = Math.max(0, startIdx);
+            const e = Math.min(points.length - 1, endIdx);
+            if (side === 'left' || side === 'both') {
+                addKerbStrip(viewer, CesiumLib, inner.left, outer.left, s, e, inner.metersPerDegLat, inner.metersPerDegLon, kerbBlockMeters, zIndex, token);
+            }
+            if (side === 'right' || side === 'both') {
+                addKerbStrip(viewer, CesiumLib, inner.right, outer.right, s, e, inner.metersPerDegLat, inner.metersPerDegLon, kerbBlockMeters, zIndex, token);
+            }
+        }
+    }
+
+    async function renderCircuitByKey(viewer, CesiumLib, key) {
+        const token = ++renderToken;
+        clearActiveCircuit(viewer);
+
+        if (!key || key === 'none' || !circuitsIndex[key]) {
+            return;
+        }
+
+        try {
+            if (!loadedCircuitsCache[key]) {
+                const trackUrl = resolveTrackUrl(circuitsIndex[key], key);
+                loadedCircuitsCache[key] = await fetchJson(trackUrl);
+            }
+            if (token !== renderToken) return;
+
+            currentCircuitKey = key;
+            const c = loadedCircuitsCache[key];
+            const trackW = c.trackWidth || 16;
+            const pitW = c.pitWidth || 5;
+            const kerbW = c.kerbWidth || 1.1;
+            const kerbBlock = c.kerbBlockMeters || DEFAULT_KERB_BLOCK_METERS;
+
+            buildRibbon(viewer, CesiumLib, c.pitWaypoints, pitW, kerbW, kerbBlock, '#332E2E', 0.95, 1, [], token);
+            buildRibbon(viewer, CesiumLib, c.outerWaypoints, trackW, kerbW, kerbBlock, '#4A4646', 1.0, 2, c.outerKerbZones || [], token);
+            buildRibbon(viewer, CesiumLib, c.waypoints, trackW, kerbW, kerbBlock, '#332E2E', 0.95, 3, c.kerbZones || [], token);
+        } catch (err) {
+            if (token === renderToken) {
+                console.error(`[GeoFS Circuit Selector] Failed to load circuit "${key}":`, err);
+            }
+        }
+    }
+
+    function loadSavedUiPosition() {
+        try {
+            const raw = localStorage.getItem(UI_POS_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+                return parsed;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function saveUiPosition(left, top) {
+        try {
+            localStorage.setItem(UI_POS_STORAGE_KEY, JSON.stringify({ left, top }));
+        } catch (_) {}
+    }
+
+    function makeDraggable(container, ignoreSelector) {
+        let isDragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        const saved = loadSavedUiPosition();
+        if (saved) {
+            container.style.left = `${saved.left}px`;
+            container.style.top = `${saved.top}px`;
+            container.style.right = 'auto';
+        }
+
+        container.style.cursor = 'grab';
+        container.style.userSelect = 'none';
+
+        container.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (ignoreSelector && e.target.closest(ignoreSelector)) return;
+
+            const rect = container.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            isDragging = true;
+
+            container.style.left = `${rect.left}px`;
+            container.style.top = `${rect.top}px`;
+            container.style.right = 'auto';
+            container.style.cursor = 'grabbing';
+
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const rect = container.getBoundingClientRect();
+            const maxLeft = Math.max(0, window.innerWidth - rect.width);
+            const maxTop = Math.max(0, window.innerHeight - rect.height);
+
+            const nextLeft = Math.min(Math.max(0, e.clientX - offsetX), maxLeft);
+            const nextTop = Math.min(Math.max(0, e.clientY - offsetY), maxTop);
+
+            container.style.left = `${nextLeft}px`;
+            container.style.top = `${nextTop}px`;
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            if (e.button !== 0 && e.buttons !== 0) return;
+
+            isDragging = false;
+            container.style.cursor = 'grab';
+
+            const rect = container.getBoundingClientRect();
+            saveUiPosition(Math.round(rect.left), Math.round(rect.top));
+        });
+    }
+
+    function getTrackLabel(key) {
+        if (key === 'none') return 'None (Unloaded)';
+        const entry = circuitsIndex[key];
+        if (entry && typeof entry === 'object' && entry.name) {
+            return entry.name;
+        }
+        return key;
+    }
+
+    function createCircuitSelectorUI(viewer, CesiumLib, keys) {
+        if (document.getElementById('geofs-circuit-selector-ui')) return;
+
+        const sortedKeys = [...keys].sort((a, b) =>
+            getTrackLabel(a).localeCompare(getTrackLabel(b), undefined, { sensitivity: 'base' })
+        );
+
+        const container = document.createElement('div');
+        container.id = 'geofs-circuit-selector-ui';
+        container.style.cssText = [
+            'position:fixed',
+            'top:80px',
+            'right:16px',
+            'z-index:99999',
+            'background:rgba(24,24,28,0.92)',
+            'color:#fff',
+            'padding:8px 10px',
+            'border-radius:6px',
+            'font-family:sans-serif',
+            'font-size:12px',
+            'display:flex',
+            'align-items:center',
+            'gap:8px',
+            'box-shadow:0 2px 8px rgba(0,0,0,0.45)'
+        ].join(';');
+
+        const dragHandle = document.createElement('span');
+        dragHandle.setAttribute('aria-label', 'Drag circuit selector');
+        dragHandle.textContent = '⋮⋮';
+        dragHandle.style.cssText = 'font-weight:600;cursor:grab;white-space:nowrap;color:#d1d5db;user-select:none;';
+
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'geofs-circuit-search-wrap';
+        searchWrap.style.cssText = 'position:relative;display:flex;align-items:center;';
+
+        const input = document.createElement('input');
+        input.id = 'geofs-circuit-search';
+        input.type = 'text';
+        input.setAttribute('aria-label', 'Search circuit');
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.placeholder = 'Search circuit...';
+        input.value = currentCircuitKey === 'none' ? '' : getTrackLabel(currentCircuitKey);
+        input.style.cssText = [
+            'width:240px',
+            'padding:4px 24px 4px 8px',
+            'border-radius:4px',
+            'border:1px solid #555',
+            'background:#141418',
+            'color:#fff',
+            'font-size:12px',
+            'outline:none',
+            'cursor:text'
+        ].join(';');
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.title = 'Unload circuit / Clear search';
+        clearBtn.textContent = '×';
+        clearBtn.style.cssText = [
+            'position:absolute',
+            'right:4px',
+            'background:transparent',
+            'border:none',
+            'color:#aaa',
+            'font-size:14px',
+            'line-height:1',
+            'cursor:pointer',
+            'padding:2px 4px'
+        ].join(';');
+
+        const dropdown = document.createElement('div');
+        dropdown.id = 'geofs-circuit-suggestions';
+        dropdown.style.cssText = [
+            'position:absolute',
+            'top:calc(100% + 4px)',
+            'left:0',
+            'width:100%',
+            'max-height:260px',
+            'overflow-y:auto',
+            'background:#141418',
+            'border:1px solid #444',
+            'border-radius:4px',
+            'box-shadow:0 6px 16px rgba(0,0,0,0.6)',
+            'display:none',
+            'z-index:100000'
+        ].join(';');
+
+        let filteredOptions = [];
+        let highlightedIdx = -1;
+
+        function closeDropdown() {
+            dropdown.style.display = 'none';
+            highlightedIdx = -1;
+        }
+
+        function syncInputWithCurrent() {
+            input.value = currentCircuitKey === 'none' ? '' : getTrackLabel(currentCircuitKey);
+        }
+
+        function selectCircuit(key) {
+            closeDropdown();
+            if (!key || key === 'none') {
+                input.value = '';
+                if (currentCircuitKey !== 'none') {
+                    renderCircuitByKey(viewer, CesiumLib, 'none');
+                }
+                return;
+            }
+            input.value = getTrackLabel(key);
+            if (key !== currentCircuitKey) {
+                renderCircuitByKey(viewer, CesiumLib, key);
+            }
+        }
+
+        function updateHighlight() {
+            const items = dropdown.querySelectorAll('.geofs-circuit-item');
+            items.forEach((el, idx) => {
+                const isActive = idx === highlightedIdx;
+                el.style.background = isActive ? '#2563eb' : (el.dataset.key === currentCircuitKey ? '#1f2937' : 'transparent');
+            });
+            if (highlightedIdx >= 0 && items[highlightedIdx]) {
+                items[highlightedIdx].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        function renderSuggestions(queryText) {
+            const q = (queryText || '').trim().toLowerCase();
+            const matches = q
+                ? sortedKeys.filter((k) => getTrackLabel(k).toLowerCase().includes(q) || k.toLowerCase().includes(q))
+                : sortedKeys;
+
+            filteredOptions = matches;
+            highlightedIdx = matches.length > 0 ? 0 : -1;
+            dropdown.innerHTML = '';
+
+            if (matches.length === 0) {
+                const empty = document.createElement('div');
+                empty.textContent = q ? `No circuits matching "${queryText.trim()}"` : 'No circuits available';
+                empty.style.cssText = 'padding:6px 8px;color:#888;font-style:italic;';
+                dropdown.appendChild(empty);
+                dropdown.style.display = 'block';
+                return;
+            }
+
+            filteredOptions.forEach((key, idx) => {
+                const item = document.createElement('div');
+                item.className = 'geofs-circuit-item';
+                item.dataset.key = key;
+                item.textContent = getTrackLabel(key);
+                item.style.cssText = 'padding:6px 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;';
+
+                item.addEventListener('mouseenter', () => {
+                    highlightedIdx = idx;
+                    updateHighlight();
+                });
+
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    selectCircuit(key);
+                });
+
+                dropdown.appendChild(item);
+            });
+
+            dropdown.style.display = 'block';
+            updateHighlight();
+        }
+
+        ['keydown', 'keyup', 'keypress'].forEach((evtName) => {
+            input.addEventListener(evtName, (e) => {
+                e.stopPropagation();
+            });
+        });
+
+        input.addEventListener('focus', () => {
+            input.select();
+            renderSuggestions('');
+        });
+
+        input.addEventListener('input', () => {
+            renderSuggestions(input.value);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (dropdown.style.display === 'none') {
+                    renderSuggestions(input.value);
+                } else if (filteredOptions.length > 0) {
+                    highlightedIdx = (highlightedIdx + 1) % filteredOptions.length;
+                    updateHighlight();
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (filteredOptions.length > 0) {
+                    highlightedIdx = (highlightedIdx - 1 + filteredOptions.length) % filteredOptions.length;
+                    updateHighlight();
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (highlightedIdx >= 0 && filteredOptions[highlightedIdx]) {
+                    selectCircuit(filteredOptions[highlightedIdx]);
+                    input.blur();
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                syncInputWithCurrent();
+                closeDropdown();
+                input.blur();
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(() => {
+                syncInputWithCurrent();
+                closeDropdown();
+            }, 120);
+        });
+
+        clearBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            selectCircuit('none');
+        });
+
+        searchWrap.appendChild(input);
+        searchWrap.appendChild(clearBtn);
+        searchWrap.appendChild(dropdown);
+
+        container.appendChild(dragHandle);
+        container.appendChild(searchWrap);
+        (document.body || document.documentElement).appendChild(container);
+
+        makeDraggable(container, '.geofs-circuit-search-wrap');
+    }
+
+    const viewerWait = setInterval(async () => {
+        const viewer = pageWin.geofs && pageWin.geofs.api && pageWin.geofs.api.viewer;
+        const CesiumLib = pageWin.Cesium;
+        if (viewer && viewer.entities && CesiumLib) {
+            clearInterval(viewerWait);
+            try {
+                circuitsIndex = await fetchJson(INDEX_URL);
+                const keys = Object.keys(circuitsIndex);
+                createCircuitSelectorUI(viewer, CesiumLib, keys);
+            } catch (err) {
+                console.error('[GeoFS Circuit Selector] Failed to load circuits index:', err);
+            }
+        }
+    }, 500);
+})();
