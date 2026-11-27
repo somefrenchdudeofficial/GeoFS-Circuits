@@ -16,55 +16,55 @@
     "file": "interlagos.json"
   },
     "yas_marina": {
-    "name": "Yas Marina Circuit",
+    "name": "Yas Marina Circuit - Abu Dhabi, UAE",
     "file": "yas_marina.json"
   },
     "norisring": {
-    "name": "Norisring",
+    "name": "Norisring - Nuremberg, Germany",
     "file": "norisring.json"
   },
     "macau": {
-    "name": "Macau Guia Circuit",
+    "name": "Guia Circuit - Macau",
     "file": "macau.json"
   },
     "zandvoort": {
-    "name": "Circuit Zandvoort",
+    "name": "Circuit Zandvoort - Zandvoort, Netherlands",
     "file": "zandvoort.json"
   },
     "red_bull_ring": {
-    "name": "Red Bull Ring",
+    "name": "Red Bull Ring - Spielberg, Austria",
     "file": "red_bull_ring.json"
   },
     "brands_hatch_indy": {
-    "name": "Brands Hatch - Indy Layout",
+    "name": "Brands Hatch - West Kingsdown, UK",
     "file": "brands_hatch_indy.json"
   },
     "lime_rock": {
-    "name": "Lime Rock Park",
+    "name": "Lime Rock Park - Lakeville, Connecticut, USA",
     "file": "lime_rock.json"
   },
     "long_beach": {
-    "name": "Long Beach Street Circuit",
+    "name": "Long Beach Street Circuit - Long Beach, California, USA",
     "file": "long_beach.json"
   },
   "baku": {
-    "name": "Baku City Circuit",
+    "name": "Baku City Circuit - Baku, Azerbaijan",
     "file": "baku.json"
   },
   "lusail": {
-    "name": "Lusail International Circuit",
+    "name": "Lusail International Circuit - Lusail, Qatar",
     "file": "lusail.json"
   },
     "bahrain": {
-    "name": "Bahrain International Circuit - Grand Prix Layout",
+    "name": "Bahrain International Circuit (GP) - Sakhir, Bahrain",
     "file": "bahrain.json"
   },
     "outer_bahrain": {
-    "name": "Bahrain International Circuit - Outer Layout",
+    "name": "Bahrain International Circuit (Outer) - Sakhir, Bahrain",
     "file": "outer_bahrain.json"
   },
     "fuji": {
-    "name": "Fuji Speedway",
+    "name": "Fuji Speedway - Oyama, Japan",
     "file": "fuji.json"
   }
 }
