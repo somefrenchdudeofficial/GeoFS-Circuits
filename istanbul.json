@@ -1,7 +1,7 @@
 {
   "name": "Istanbul Park",
-  "trackWidth": 15,
-  "pitWidth": 5,
+  "trackWidth": 16,
+  "pitWidth": 6,
   "kerbWidth": 1.1,
   "kerbBlockMeters": 2.5,
   "waypoints": [
