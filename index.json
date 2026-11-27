@@ -3,6 +3,10 @@
     "name": "Circuit Paul Ricard - Le Castellet, Var, France",
     "file": "paul_ricard.json"
   },
+    "istanbul": {
+    "name": "Istanbul Park - Istanbul, Turkey",
+    "file": "istanbul.json"
+  },
     "albert_park": {
     "name": "Albert Park Circuit - Melbourne, Victoria, Australia",
     "file": "albert_park.json"
