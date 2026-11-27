@@ -3,6 +3,10 @@
     "name": "Circuit Paul Ricard - Le Castellet, France",
     "file": "paul_ricard.json"
   },
+    "bathurst": {
+    "name": "Mount Panorama Circuit - Bathurst, New South Wales, Australia",
+    "file": "bathurst.json"
+  },
     "laguna_seca": {
     "name": "Laguna Seca Raceway - Monterey, California, USA",
     "file": "laguna_seca.json"
