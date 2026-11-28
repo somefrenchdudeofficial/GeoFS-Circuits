@@ -1,7 +1,7 @@
 {
     "name": "Hungaroring",
-    "trackWidth": 10,
-    "pitWidth": 4,
+    "trackWidth": 12,
+    "pitWidth": 5,
     "kerbWidth": 1.1,
     "kerbBlockMeters": 2.5,
     "waypoints": [
