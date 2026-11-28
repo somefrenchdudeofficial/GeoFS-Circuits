@@ -3,6 +3,10 @@
     "name": "Circuit Paul Ricard - Le Castellet, Var, France",
     "file": "paul_ricard.json"
   },
+    "vir": {
+    "name": "Virginia International Raceway - Alton, Virginia, USA",
+    "file": "vir.json"
+  },
     "hungaroring": {
     "name": "Hungaroring - Mogyoród, Hungary",
     "file": "hungaroring.json"
