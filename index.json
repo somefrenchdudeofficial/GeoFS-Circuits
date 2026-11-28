@@ -3,6 +3,10 @@
     "name": "Circuit Paul Ricard - Le Castellet, Var, France",
     "file": "paul_ricard.json"
   },
+    "cota": {
+    "name": "Circuit of the Americas - Austin, Texas, USA",
+    "file": "cota.json"
+  },
     "indianapolis": {
     "name": "Indianapolis Motor Speedway (GP) - Speedway, Indiana, USA",
     "file": "indianapolis.json"
